@@ -1,26 +1,22 @@
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.security.KeyStore;
+import java.io.File;
 import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
-import org.apache.commons.httpclient.DefaultHttpMethodRetryHandler;
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpMethod;
-import org.apache.commons.httpclient.HttpsURL;
-import org.apache.commons.httpclient.MultiThreadedHttpConnectionManager;
-import org.apache.commons.httpclient.cookie.CookiePolicy;
-import org.apache.commons.httpclient.methods.GetMethod;
-import org.apache.commons.httpclient.protocol.Protocol;
-import org.apache.http.conn.ssl.SSLSocketFactory;
-
-import com.onmobile.ump.thirdparty.EasySSLProtocolSocketFactory;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.ssl.SSLContextBuilder;
+import org.apache.http.ssl.SSLContexts;
+import org.apache.http.util.EntityUtils;
 
 public class TSLTest {
 	private static int window = 10;
@@ -30,67 +26,62 @@ public class TSLTest {
 	public static void main(String[] args) {
 		
 		try {
-
-			String responseBody = null;
-			int responseCode = -1;
-			String url = "https://google.com";
-
-
-			String sslCertificateVersion = "TLSv1.3";
-			InputStream is = new FileInputStream("/workspace/eclipse_workspace/TSL1.3/src/mykeystore.jks");
-			// You could get a resource as a stream instead.
-
-			CertificateFactory cf = CertificateFactory.getInstance("X.509");
-			X509Certificate caCert = (X509Certificate)cf.generateCertificate(is);
-			TrustManagerFactory tmf = TrustManagerFactory
-				    .getInstance(TrustManagerFactory.getDefaultAlgorithm());
-				KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-				ks.load(null); // You don't need the KeyStore instance to come from a file.
-				ks.setCertificateEntry("caCert", caCert);
-
-				tmf.init(ks);
-			
-			SSLContext sslcontext = SSLContext.getInstance(sslCertificateVersion);
-			sslcontext.init(null, tmf.getTrustManagers(), null);
-
-			SSLSocketFactory sf = new SSLSocketFactory(sslcontext);
-			sf.setHostnameVerifier(SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
+			TrustManager easyTrustManager = new X509TrustManager() { 
+			    public void checkClientTrusted(
+			            X509Certificate[] chain,
+			            String authType) throws CertificateException {
+			        // Oh, I am easy!
+			    }
+			    public void checkServerTrusted(
+			            X509Certificate[] chain,
+			            String authType) throws CertificateException {
+			        // Oh, I am easy!
+			    }
+			    public X509Certificate[] getAcceptedIssuers() {
+			        return null;
+			    }
+			};
 			
 			
-		      HttpsURL httpsoSrc = new HttpsURL(url);
-				String host = httpsoSrc.getHost();
-				int port = httpsoSrc.getPort();
-				Protocol myhttps = new Protocol("https",
-						new EasySSLProtocolSocketFactory(), port);
-				Protocol.registerProtocol("https", myhttps);
-			
-			HttpMethod method = new GetMethod("https://google.com");
-			method.getParams().setCookiePolicy(
-					CookiePolicy.IGNORE_COOKIES);
-			MultiThreadedHttpConnectionManager connectionManager = new MultiThreadedHttpConnectionManager();
-			connectionManager.getParams().setStaleCheckingEnabled(true);
-			connectionManager.getParams().setDefaultMaxConnectionsPerHost(
-					window);
-			connectionManager.getParams().setMaxTotalConnections(window);
-			HttpClient httpClient = new HttpClient(connectionManager);
-			httpClient.getHostConfiguration().setHost(host, port,
-					myhttps);
-			httpClient = new HttpClient(connectionManager);
-			DefaultHttpMethodRetryHandler retryhandler = new DefaultHttpMethodRetryHandler(
-					0, false);
-			httpClient.getParams().setParameter("http.method.retry-handler",
-					retryhandler);
-			httpClient.getHttpConnectionManager().getParams()
-					.setConnectionTimeout(timeout);
-			httpClient.getParams().setSoTimeout(timeout);
-			long respTime = System.currentTimeMillis();
-			responseCode = httpClient.executeMethod(method);
-			responseBody = method.getResponseBodyAsString();
-			respTime = System.currentTimeMillis() - respTime;
-			System.out.println("Response Code =  " + responseCode
-					+ ",Response Code = " + responseBody
-					+ ",response time = " + respTime + " ms");
-			
+			//Creating SSLContextBuilder object
+		      SSLContextBuilder SSLBuilder = SSLContexts.custom();
+		  
+		      //Loading the Keystore file
+		      File file = new File("/workspace/eclipse_workspace/TSL1.3/src/mykeystore.jks");
+		     //SSLBuilder = SSLBuilder.loadTrustMaterial(file,"changeit".toCharArray());
+
+		      //Building the SSLContext usiong the build() method
+		      String sslCertificateVersion = System.getProperty("https.protocols","TLSv1.3" );
+		      SSLContext sslcontext = SSLContext.getInstance(sslCertificateVersion);
+		      sslcontext.init(null, new TrustManager[] { easyTrustManager }, null);
+		 
+		      //Creating SSLConnectionSocketFactory object
+		      SSLConnectionSocketFactory sslConSocFactory = new SSLConnectionSocketFactory(sslcontext, new String[]{"TLSv1.3"}, null,    
+		    		   SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+		 
+		      //Creating HttpClientBuilder
+		      HttpClientBuilder clientbuilder = HttpClients.custom();
+
+		      //Setting the SSLConnectionSocketFactory
+		      clientbuilder = clientbuilder.setSSLSocketFactory(sslConSocFactory);
+
+		      //Building the CloseableHttpClient
+		      CloseableHttpClient httpclient = clientbuilder.build();
+		      
+		      //Creating the HttpGet request
+		      HttpGet httpget = new HttpGet("https://google.com");
+		 
+		      //Executing the request
+		      HttpResponse httpresponse = httpclient.execute(httpget);
+
+		      //printing the status line
+		      System.out.println(httpresponse.getStatusLine());
+
+		      //Retrieving the HttpEntity and displaying the no.of bytes read
+		      HttpEntity entity = httpresponse.getEntity();
+		      if (entity != null) {
+		         System.out.println(EntityUtils.toByteArray(entity).length);
+		      } 
 		}
 		catch (Exception e) {
 			e.printStackTrace();
